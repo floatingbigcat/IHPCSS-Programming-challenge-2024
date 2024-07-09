@@ -57,6 +57,8 @@ void calculate_pagerank(double pagerank[])
     double damping_value = (1.0 - DAMPING_FACTOR) / GRAPH_ORDER;
     double diff = 1.0;
     size_t iteration = 0;
+    
+    
     double start = omp_get_wtime();
     double elapsed = omp_get_wtime() - start;
     double time_per_iteration = 0;
