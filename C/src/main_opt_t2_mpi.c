@@ -44,7 +44,7 @@ void initialize_graph(void)
  * @brief Calculates the pagerank of all vertices in the graph.
  * @param pagerank The array in which store the final pageranks.
  */
-void calculate_pagerank(double pagerank[])
+void calculate_pagerank(double pagerank[], int rank, int size)
 {
     double initial_rank = 1.0 / GRAPH_ORDER;
  
@@ -63,10 +63,8 @@ void calculate_pagerank(double pagerank[])
     double elapsed = omp_get_wtime() - start;
     double time_per_iteration = 0;
     double new_pagerank[GRAPH_ORDER];
-    // for(int i = 0; i < GRAPH_ORDER; i++)
-    // {
-    //     new_pagerank[i] = 0.0;
-    // }
+
+    printf("Hello from Rank: %d with World Size: %d.\n", rank, size);
 
     // If we exceeded the MAX_TIME seconds, we stop. If we typically spend X seconds on an iteration, and we are less than X seconds away from MAX_TIME, we stop.
     while(elapsed < MAX_TIME && (elapsed + time_per_iteration) < MAX_TIME)
@@ -74,9 +72,8 @@ void calculate_pagerank(double pagerank[])
         double iteration_start = omp_get_wtime();
         double pagerank_total = 0.0;
         diff = 0.0;
-
         #pragma omp parallel for reduction(+:diff, pagerank_total)
-        for(int i = 0; i < GRAPH_ORDER; i++)
+        for(int i = rank; i < GRAPH_ORDER; i += size)
         {
             new_pagerank[i] = 0.0;
 			for(int j = 0; j < GRAPH_ORDER; j++)
@@ -100,6 +97,9 @@ void calculate_pagerank(double pagerank[])
             pagerank[i] = new_pagerank[i];
             pagerank_total += pagerank[i];
 		}
+
+        MPI_Allreduce(MPI_IN_PLACE, &diff, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+        MPI_Allreduce(MPI_IN_PLACE, &pagerank_total, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
         max_diff = (max_diff < diff) ? diff : max_diff;
         total_diff += diff;
@@ -173,6 +173,12 @@ int main(int argc, char* argv[])
     // We do not need argv, this line silences potential compilation warnings.
     (void) argv;
 
+    MPI_Init(&argc, &argv);
+
+    int rank, size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
     printf("This program has two graph generators: generate_nice_graph and generate_sneaky_graph. If you intend to submit, your code will be timed on the sneaky graph, remember to try both.\n");
 
     // Get the time at the very start.
@@ -182,7 +188,7 @@ int main(int argc, char* argv[])
  
     /// The array in which each vertex pagerank is stored.
     double pagerank[GRAPH_ORDER];
-    calculate_pagerank(pagerank);
+    calculate_pagerank(pagerank, rank, size);
  
     // Calculates the sum of all pageranks. It should be 1.0, so it can be used as a quick verification.
     double sum_ranks = 0.0;
@@ -198,6 +204,6 @@ int main(int argc, char* argv[])
     double end = omp_get_wtime();
  
     printf("Total time taken: %.2f seconds.\n", end - start);
- 
+    MPI_Finalize();
     return 0;
 }
