@@ -53,7 +53,7 @@ void generate_nice_graph(void) {
         adjacency_matrix[source][destination] = 1.0;
       }
     }
-  }
+  } 
   printf("%.2f seconds to generate the graph.\n", omp_get_wtime() - start);
 }
 
@@ -84,7 +84,8 @@ int main(int argc, char *argv[]) {
 
   //   MPI_Init(&argc, &argv);
 
-  int rank, size;
+  const int rank=0;
+  const int size=1;
   //   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   //   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
@@ -100,7 +101,7 @@ int main(int argc, char *argv[]) {
 
   /// The array in which each vertex pagerank is stored.
   double pagerank[GRAPH_ORDER];
-  int outdegrees[GRAPH_ORDER] = {0};
+  int outdegrees[GRAPH_ORDER];
 
 //   calculate_pagerank(pagerank, rank, size);
 // =============================================================================
@@ -141,9 +142,9 @@ int main(int argc, char *argv[]) {
         outdegrees[i] = 0;
       }
 
-#pragma omp target teams distribute parallel for shared(outdegrees) private(   \
-        outdegree) reduction(+ : outdegree)
-      for (int j = 0; j < GRAPH_ORDER; ++j) {
+// #pragma omp target teams distribute parallel for shared(outdegrees) private(outdegree) reduction(+ : outdegree)
+#pragma omp target teams distribute parallel for shared(outdegrees)
+      for (int j = rank; j < GRAPH_ORDER; j += size) {
         int outdegree = 0; // Local variable to minimize array access
         for (int k = 0; k < GRAPH_ORDER; k++) {
           if (adjacency_matrix[j][k] == 1.0) {
@@ -152,15 +153,11 @@ int main(int argc, char *argv[]) {
         }
         outdegrees[j] = outdegree;
       }
-      //   MPI_Allreduce(MPI_IN_PLACE, &outdegrees, GRAPH_ORDER, MPI_INT,
-      //   MPI_SUM, MPI_COMM_WORLD);
 
-#pragma omp target teams distribute parallel for shared(outdegrees)            \
-    shared(adjacency_matrix)
+#pragma omp target teams distribute parallel for reduction(+:new_pagerank[:GRAPH_ORDER])
       for (int j = rank; j < GRAPH_ORDER; j += size) {
-        const double *adj_row = adjacency_matrix[j];
         for (int i = 0; i < GRAPH_ORDER; i++) {
-          if (adj_row[i] == 1.0) {
+          if (adjacency_matrix[j][i] == 1.0) {
             if (outdegrees[j] > 0) // To avoid division by zero
             {
               new_pagerank[i] += pagerank[j] / (double)outdegrees[j];
@@ -168,9 +165,6 @@ int main(int argc, char *argv[]) {
           }
         }
       }
-
-      //   MPI_Allreduce(MPI_IN_PLACE, &new_pagerank, GRAPH_ORDER, MPI_DOUBLE,
-      //   MPI_SUM, MPI_COMM_WORLD);
 
 #pragma omp target teams distribute parallel for shared(new_pagerank)
       for (int i = 0; i < GRAPH_ORDER; i++) {
@@ -195,8 +189,7 @@ int main(int argc, char *argv[]) {
 
       double pagerank_total = 0.0;
 
-#pragma omp target teams distribute parallel for shared(pagerank)              \
-    reduction(+ : pagerank_total)
+#pragma omp target teams distribute parallel for shared(pagerank) map(tofrom:pagerank_total) reduction(+ : pagerank_total)
       for (int i = 0; i < GRAPH_ORDER; i++) {
         pagerank_total += pagerank[i];
       }
@@ -234,6 +227,5 @@ int main(int argc, char *argv[]) {
 
   printf("Total time taken: %.2f seconds.\n", end - start);
 
-  //   MPI_Finalize();
   return 0;
 }
