@@ -135,10 +135,10 @@ int main(int argc, char *argv[]) {
         outdegrees[i] = 0;
       }
 
-#pragma omp target teams distribute parallel for shared(outdegrees) default(   \
-        none)
+#pragma omp target teams distribute shared(outdegrees) default(none)
       for (int j = rank; j < GRAPH_ORDER; j += size) {
-        int outdegree = 0; // Local
+        int outdegree = 0; // Local to team
+#pragma omp parallel for reduction(+ : outdegree)
         for (int k = 0; k < GRAPH_ORDER; k++) {
           if (adjacency_matrix[j][k] == 1.0) {
             outdegree++;
