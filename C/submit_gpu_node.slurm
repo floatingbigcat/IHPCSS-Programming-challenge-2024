@@ -8,7 +8,7 @@
 # SLURM will think the line is no-longer a special comment and will ignore it.
 
 # The name of the output file
-#SBATCH -o output.txt
+#SBATCH -o output_GPU_node.txt
 
 # The budget account to use
 # SBATCH -A=tra210016p
@@ -22,7 +22,7 @@
 # will be your first one. Remember to update it the days that follow :)
 # If you do *not* use a reservation, simply insert a space between '#' and
 # 'SBATCH', it will turn the line into a plain comment.
-#SBATCH --res ChallGPU2Jul9
+#SBATCH --res ChallGPU2Jul10
 
 # The partition to use, GPU nodes here
 #SBATCH -p GPU
@@ -37,7 +37,7 @@
 #SBATCH -t 00:00:30
 
 # The number of nodes (at most 2)
-#SBATCH -N 2
+#SBATCH -N 1
 
 # The number of MPI processes per node
 #SBATCH --ntasks-per-node=1
@@ -59,4 +59,4 @@ module load cuda/11.7.1 nvhpc/22.9 openmpi/4.0.5-nvhpc22.9
 make
 
 # Execute the program
-mpirun --bind-to socket -n $SLURM_NTASKS --report-bindings ./bin/main
+./bin/main
