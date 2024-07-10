@@ -75,9 +75,9 @@ void calculate_pagerank(double pagerank[], int rank, int size) {
         outdegrees[i] = 0;
       }
 
-    #pragma omp target teams distribute parallel for shared(outdegrees)
+    int outdegree = 0; // Local variable to minimize array access
+    #pragma omp target teams distribute parallel for shared(outdegrees) private(outdegree) reduction(+:outdegree)
       for (int j = rank; j < GRAPH_ORDER; j += size) {
-        int outdegree = 0; // Local variable to minimize array access
         for (int k = 0; k < GRAPH_ORDER; k++) {
           if (adjacency_matrix[j][k] == 1.0) {
             outdegree++;
