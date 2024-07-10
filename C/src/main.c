@@ -76,25 +76,37 @@ void calculate_pagerank(double pagerank[], int rank, int size)
             new_pagerank[i] = 0.0;
         }
 
-		for(int i = rank; i < GRAPH_ORDER; i += size)
+        int outdegrees[GRAPH_ORDER] = {0};
+        
+        for (int j = rank; j < GRAPH_ORDER; j += size)
         {
-			for(int j = 0; j < GRAPH_ORDER; j++)
+            int outdegree = 0; // Local variable to minimize array access
+            for (int k = 0; k < GRAPH_ORDER; k++)
             {
-				if (adjacency_matrix[j][i] == 1.0)
+                if (adjacency_matrix[j][k] == 1.0)
                 {
-					int outdegree = 0;
-				 
-					for(int k = 0; k < GRAPH_ORDER; k++)
+                    outdegree++;
+                }
+            }
+            outdegrees[j] = outdegree;
+        }
+        MPI_Allreduce(MPI_IN_PLACE, &outdegrees, GRAPH_ORDER, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+        for (int j = rank; j < GRAPH_ORDER; j += size)
+        {
+            const double* adj_row = adjacency_matrix[j];
+            for (int i = 0; i < GRAPH_ORDER; i++)
+            {
+                if (adj_row[i] == 1.0)
+                {
+                    if (outdegrees[j] > 0) // To avoid division by zero
                     {
-						if (adjacency_matrix[j][k] == 1.0)
-                        {
-							outdegree++;
-						}
-					}
-					new_pagerank[i] += pagerank[j] / (double)outdegree;
-				}
-			}
-		}
+                        new_pagerank[i] += pagerank[j] / (double)outdegrees[j];
+                    }
+                }
+            }
+        }
+
         MPI_Allreduce(MPI_IN_PLACE, &new_pagerank, GRAPH_ORDER, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
         for(int i = 0; i < GRAPH_ORDER; i++)
