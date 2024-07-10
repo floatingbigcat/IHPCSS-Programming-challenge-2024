@@ -53,7 +53,7 @@ void generate_nice_graph(void) {
         adjacency_matrix[source][destination] = 1.0;
       }
     }
-  } 
+  }
   printf("%.2f seconds to generate the graph.\n", omp_get_wtime() - start);
 }
 
@@ -84,8 +84,8 @@ int main(int argc, char *argv[]) {
 
   //   MPI_Init(&argc, &argv);
 
-  const int rank=0;
-  const int size=1;
+  const int rank = 0;
+  const int size = 1;
   //   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   //   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
@@ -103,11 +103,11 @@ int main(int argc, char *argv[]) {
   double pagerank[GRAPH_ORDER];
   int outdegrees[GRAPH_ORDER];
 
-//   calculate_pagerank(pagerank, rank, size);
-// =============================================================================
-// Main algorithm
-// calculate_pagerank(pagerank);
-// =============================================================================
+  //   calculate_pagerank(pagerank, rank, size);
+  // =============================================================================
+  // Main algorithm
+  // calculate_pagerank(pagerank);
+  // =============================================================================
   double initial_rank = 1.0 / GRAPH_ORDER;
 
   // Initialise all vertices to 1/n.
@@ -123,13 +123,6 @@ int main(int argc, char *argv[]) {
   double time_per_iteration = 0;
   double new_pagerank[GRAPH_ORDER];
 
-  for (int i = 0; i < GRAPH_ORDER; i++) {
-    new_pagerank[i] = 0.0;
-  }
-
-// If we exceeded the MAX_TIME seconds, we stop. If we typically spend X
-// seconds on an iteration, and we are less than X seconds away from MAX_TIME,
-// we stop.
 #pragma omp target data map(tofrom : new_pagerank, adjacency_matrix, pagerank, \
                                 diff, outdegrees)
   {
@@ -142,10 +135,10 @@ int main(int argc, char *argv[]) {
         outdegrees[i] = 0;
       }
 
-// #pragma omp target teams distribute parallel for shared(outdegrees) private(outdegree) reduction(+ : outdegree)
-#pragma omp target teams distribute parallel for shared(outdegrees)
+#pragma omp target teams distribute parallel for shared(outdegrees) default(   \
+        none)
       for (int j = rank; j < GRAPH_ORDER; j += size) {
-        int outdegree = 0; // Local variable to minimize array access
+        int outdegree = 0; // Local
         for (int k = 0; k < GRAPH_ORDER; k++) {
           if (adjacency_matrix[j][k] == 1.0) {
             outdegree++;
@@ -154,14 +147,12 @@ int main(int argc, char *argv[]) {
         outdegrees[j] = outdegree;
       }
 
-#pragma omp target teams distribute parallel for reduction(+:new_pagerank[:GRAPH_ORDER])
+#pragma omp target teams distribute reduction(+ : new_pagerank[ : GRAPH_ORDER])
       for (int j = rank; j < GRAPH_ORDER; j += size) {
+#pragma omp parallel for
         for (int i = 0; i < GRAPH_ORDER; i++) {
           if (adjacency_matrix[j][i] == 1.0) {
-            if (outdegrees[j] > 0) // To avoid division by zero
-            {
-              new_pagerank[i] += pagerank[j] / (double)outdegrees[j];
-            }
+            new_pagerank[i] += pagerank[j] / (double)outdegrees[j];
           }
         }
       }
@@ -172,7 +163,6 @@ int main(int argc, char *argv[]) {
       }
 
       diff = 0.0;
-
 #pragma omp target teams distribute parallel for shared(                       \
         new_pagerank, pagerank) reduction(+ : diff)
       for (int i = 0; i < GRAPH_ORDER; i++) {
@@ -188,8 +178,8 @@ int main(int argc, char *argv[]) {
       }
 
       double pagerank_total = 0.0;
-
-#pragma omp target teams distribute parallel for shared(pagerank) map(tofrom:pagerank_total) reduction(+ : pagerank_total)
+#pragma omp target teams distribute parallel for shared(pagerank)              \
+    map(tofrom : pagerank_total) reduction(+ : pagerank_total)
       for (int i = 0; i < GRAPH_ORDER; i++) {
         pagerank_total += pagerank[i];
       }
@@ -203,14 +193,16 @@ int main(int argc, char *argv[]) {
       elapsed = omp_get_wtime() - sstart;
       iteration++;
       time_per_iteration = elapsed / iteration;
-    }
-  }
+    } // end while loop
+  } // end pragma target data scope
   printf("%zu iterations achieved in %.2f seconds\n", iteration, elapsed);
 
-  // =============================================================================
-  // =============================================================================
-  // =============================================================================
-  // =============================================================================
+  // End of main function
+  //  =============================================================================
+  //  =============================================================================
+  //  =============================================================================
+  //  =============================================================================
+
   // Calculates the sum of all pageranks. It should be 1.0, so it can be used as
   // a quick verification.
   double sum_ranks = 0.0;
