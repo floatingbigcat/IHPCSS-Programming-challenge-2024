@@ -1,10 +1,7 @@
-mpicc -o bin/main src/main.c -O2 -Wall -mp=gpu -fopenmp -lm
-nvc-Warning-CUDA_HOME has been deprecated. Please, use NVHPC_CUDA_HOME instead.
-[r021.ib.bridges2.psc.edu:17692] MCW rank 0 is not bound (or bound to all available processors)
 This program has two graph generators: generate_nice_graph and generate_sneaky_graph. If you intend to submit, your code will be timed on the sneaky graph, remember to try both.
 Generate a graph for the challenge (i.e.: a sneaky graph :P )
 0.00 seconds to generate the graph.
-3807 iterations achieved in 10.00 seconds
+120741 iterations achieved in 10.00 seconds
 PageRank of vertex 0: 0.002541
 PageRank of vertex 100: 0.001726
 PageRank of vertex 200: 0.001494

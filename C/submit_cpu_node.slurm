@@ -23,7 +23,7 @@
 #SBATCH --ntasks-per-node=1
 
 # The number of OpenMP threads per MPI process
-#SBATCH --cpus-per-task=2
+#SBATCH --cpus-per-task=64
 
 # The number of OpenMP threads. If using MPI, it is the number of OpenMP threads
 # per MPI process
