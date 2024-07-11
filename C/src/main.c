@@ -6,7 +6,6 @@
  **/
 
 #include <math.h>
-#include <mpi.h>
 #include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -84,8 +83,8 @@ int main(int argc, char *argv[]) {
 
   //   MPI_Init(&argc, &argv);
 
-  const int rank = 0;
-  const int size = 1;
+  // const int rank = 0;
+  // const int size = 1;
   //   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   //   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
@@ -101,7 +100,7 @@ int main(int argc, char *argv[]) {
 
   /// The array in which each vertex pagerank is stored.
   double pagerank[GRAPH_ORDER];
-  int outdegrees[GRAPH_ORDER];
+  int outdegrees[GRAPH_ORDER]={0};
 
   //   calculate_pagerank(pagerank, rank, size);
   // =============================================================================
@@ -114,88 +113,110 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < GRAPH_ORDER; i++) {
     pagerank[i] = initial_rank;
   }
+  double local_pagerank[GRAPH_ORDER] = {0};
 
   double damping_value = (1.0 - DAMPING_FACTOR) / GRAPH_ORDER;
   double diff = 1.0;
+  double pagerank_total = 0.0;
   size_t iteration = 0;
   double sstart = omp_get_wtime();
   double elapsed = omp_get_wtime() - sstart;
   double time_per_iteration = 0;
   double new_pagerank[GRAPH_ORDER];
 
-#pragma omp target data map(tofrom : new_pagerank, adjacency_matrix, pagerank, \
-                                diff, outdegrees)
+#pragma omp target data map(to : new_pagerank, adjacency_matrix, pagerank, \
+                                diff, pagerank_total, outdegrees, local_pagerank)
   {
-    while (elapsed < MAX_TIME && (elapsed + time_per_iteration) < MAX_TIME) {
-      double iteration_start = omp_get_wtime();
 
-#pragma omp target teams distribute parallel for shared(new_pagerank)
-      for (int i = 0; i < GRAPH_ORDER; i++) {
-        new_pagerank[i] = 0.0;
-        outdegrees[i] = 0;
-      }
-
-#pragma omp target teams distribute shared(outdegrees) default(none)
-      for (int j = rank; j < GRAPH_ORDER; j += size) {
-        int outdegree = 0; // Local to team
-#pragma omp parallel for reduction(+ : outdegree)
+#pragma omp target teams distribute parallel for collapse(2) thread_limit(256)
+      for (int j = 0; j < GRAPH_ORDER; j++) {
         for (int k = 0; k < GRAPH_ORDER; k++) {
           if (adjacency_matrix[j][k] == 1.0) {
-            outdegree++;
-          }
-        }
-        outdegrees[j] = outdegree;
-      }
-
-#pragma omp target teams distribute reduction(+ : new_pagerank[ : GRAPH_ORDER])
-      for (int j = rank; j < GRAPH_ORDER; j += size) {
-#pragma omp parallel for
-        for (int i = 0; i < GRAPH_ORDER; i++) {
-          if (adjacency_matrix[j][i] == 1.0) {
-            new_pagerank[i] += pagerank[j] / (double)outdegrees[j];
+              #pragma omp atomic update
+              outdegrees[j]++;
           }
         }
       }
+      
+// printf("Time stamp 0 : %f seconds\n", omp_get_wtime() - sstart); // 0.25 s
 
-#pragma omp target teams distribute parallel for shared(new_pagerank)
+while (elapsed < MAX_TIME && (elapsed + time_per_iteration) < MAX_TIME) {
+  double iteration_start = omp_get_wtime();
+  
+#pragma omp target teams distribute parallel for thread_limit(256)
+      for (int i = 0; i < GRAPH_ORDER; i++) {
+        new_pagerank[i] = 0.0;
+        local_pagerank[i] = 0.0;
+      }
+// ==================================================
+// printf("Time stamp 1 : %f seconds\n", omp_get_wtime() - iteration_start);
+// ==================================================
+
+#pragma omp target teams distribute parallel for collapse(2) thread_limit(256)
+  for (int j = 0; j < GRAPH_ORDER; ++j) {
+    for (int i = 0; i < GRAPH_ORDER; ++i) {
+      if (adjacency_matrix[j][i] == 1.0) {
+        #pragma omp atomic update
+        new_pagerank[i] += pagerank[j] / (double)outdegrees[j];
+      }
+    }
+  }
+
+// ==================================================
+// printf("Time stamp 2 : %f seconds\n", omp_get_wtime() - iteration_start);
+// ==================================================
+
+#pragma omp target teams distribute parallel for thread_limit(256)
       for (int i = 0; i < GRAPH_ORDER; i++) {
         new_pagerank[i] = DAMPING_FACTOR * new_pagerank[i] + damping_value;
       }
 
+// // // printf("Time stamp 2.1 : %f seconds\n", omp_get_wtime() - iteration_start);
+
       diff = 0.0;
-#pragma omp target teams distribute parallel for shared(                       \
-        new_pagerank, pagerank) reduction(+ : diff)
+#pragma omp target teams distribute parallel for reduction(+ : diff) thread_limit(256)
       for (int i = 0; i < GRAPH_ORDER; i++) {
         diff += fabs(new_pagerank[i] - pagerank[i]);
       }
+
+// // printf("Time stamp 2.2 : %f seconds\n", omp_get_wtime() - iteration_start);      
+
       max_diff = (max_diff < diff) ? diff : max_diff;
       total_diff += diff;
       min_diff = (min_diff > diff) ? diff : min_diff;
 
-#pragma omp target teams distribute parallel for shared(new_pagerank, pagerank)
+#pragma omp target teams distribute parallel for thread_limit(256)
       for (int i = 0; i < GRAPH_ORDER; i++) {
         pagerank[i] = new_pagerank[i];
       }
 
       double pagerank_total = 0.0;
-#pragma omp target teams distribute parallel for shared(pagerank)              \
-    map(tofrom : pagerank_total) reduction(+ : pagerank_total)
+#pragma omp target teams distribute parallel for \
+      reduction(+ : pagerank_total) thread_limit(256)
       for (int i = 0; i < GRAPH_ORDER; i++) {
         pagerank_total += pagerank[i];
       }
       if (fabs(pagerank_total - 1.0) >= 1E-12) {
         printf(
             "[ERROR] Iteration %zu: sum of all pageranks is not 1 but %.12f.\n",
-            iteration, pagerank_total);
+            iteration);
       }
 
       double iteration_end = omp_get_wtime();
       elapsed = omp_get_wtime() - sstart;
       iteration++;
       time_per_iteration = elapsed / iteration;
+
+// ==================================================
+// printf("Time stamp 3 : %f seconds\n", omp_get_wtime() - iteration_start);
+
     } // end while loop
   } // end pragma target data scope
-  printf("%zu iterations achieved in %.2f seconds\n", iteration, elapsed);
+
+#pragma omp target data map(from : new_pagerank, adjacency_matrix, pagerank, \
+                                diff, pagerank_total, outdegrees)
+
+  printf("%zu iterations achieved in %.2f seconds\n", iteration);
 
   // End of main function
   //  =============================================================================
