@@ -10,6 +10,7 @@
 #include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 /// The number of vertices in the graph.
 #define GRAPH_ORDER 1000
@@ -87,10 +88,11 @@ void calculate_pagerank(double pagerank[], const int rank, const int n_proc) {
       adjacency_matrix[j][i] = temp;
     }
 
+  bool rank_is_in=true;
   // If we exceeded the MAX_TIME seconds, we stop. If we typically spend X
   // seconds on an iteration, and we are less than X seconds away from
   // MAX_TIME, we stop.
-  while (elapsed < MAX_TIME && (elapsed + time_per_iteration) < MAX_TIME) {
+  while (rank_is_in) {
 
 #pragma omp parallel
     {
@@ -120,6 +122,7 @@ void calculate_pagerank(double pagerank[], const int rank, const int n_proc) {
         local_pagerank[i] = DAMPING_FACTOR * local_pagerank[i] + damping_value;
     }
 
+//if true
 MPI_Allgatherv(local_pagerank,
                local_size,
                MPI_DOUBLE,
@@ -128,15 +131,6 @@ MPI_Allgatherv(local_pagerank,
                displs,
                MPI_DOUBLE,
                MPI_COMM_WORLD);
-
-  // for(int i=local_begin; i<local_begin+local_size; ++i){
-  //   if(new_pagerank[i] != local_pagerank[i%local_size]){
-  //     printf("eeror");
-  //   }
-  //   else{
-  //     printf("OKkk");
-  //   }
-  // }
 
     diff = 0.0;
 #pragma omp parallel for reduction(+ : diff)
@@ -167,7 +161,25 @@ MPI_Allgatherv(local_pagerank,
     elapsed = omp_get_wtime() - start;
     iteration++;
     time_per_iteration = elapsed / iteration;
+    
+    if(elapsed < MAX_TIME && (elapsed + time_per_iteration) < MAX_TIME){
+      rank_is_in=true;
+    }else{
+      rank_is_in=false;
+    }
+
+   MPI_Allreduce(MPI_IN_PLACE,
+                  &rank_is_in,
+                  1,
+                  MPI_C_BOOL,
+                  MPI_LAND,
+                  MPI_COMM_WORLD);
+
+  if(!rank_is_in){
+    break;
   }
+  }//end while
+
 
   printf("%zu iterations achieved in %.2f seconds\n", iteration, elapsed);
 
